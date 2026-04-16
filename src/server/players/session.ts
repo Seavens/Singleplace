@@ -1,11 +1,11 @@
 import { Service, OnStart } from '@flamework/core';
 import { PlayerStateService } from './state';
-import { GameClock, DataManager } from 'shared';
+import { Clock, DataManager } from 'shared';
 
 @Service({})
 export class SessionTimeService implements OnStart {
   private readonly sessionStartTimes = new Map<number, number>();
-  private accum = 0;
+  private readonly saveTimer = new Clock(60);
 
   public constructor(private readonly playerService: PlayerStateService) {}
 
@@ -19,12 +19,7 @@ export class SessionTimeService implements OnStart {
       this.sessionStartTimes.delete(player.UserId);
     });
 
-    GameClock.on((dt) => {
-      this.accum += dt;
-      if (this.accum < 60) return;
-      this.accum -= 60;
-      this.saveAllSessionTimes();
-    });
+    this.saveTimer.on(() => this.saveAllSessionTimes());
   }
 
   private saveSessionTime(userId: number): void {

@@ -3,7 +3,7 @@ import Object from '@rbxts/object-utils';
 import { Players } from '@rbxts/services';
 import Squash from '@rbxts/squash';
 import { Functions, Events } from 'server/network';
-import { GameClock } from 'shared/core';
+import { Clock } from 'shared/core';
 import { DataReplica, DataReplicationDelta } from 'shared/data/replication';
 import { dataAtom, DataManager } from 'shared/data/state';
 import { buildDataKey, parseDataUserId } from 'shared/data/utils';
@@ -15,17 +15,12 @@ const serdesCount = Squash.vlq();
 export class DataReplicationService implements OnStart {
   private readonly replicas = new Map<string, DataReplica>();
   private readonly hydratedPlayers = new Set<number>();
-  private accum = 0;
+  private readonly clock = new Clock(1 / 5);
 
   public constructor(private readonly playerStateService: PlayerStateService) {}
 
   public onStart(): void {
-    GameClock.on((dt) => {
-      this.accum += dt;
-      if (this.accum < 0.2) return;
-      this.accum -= 0.2;
-      this.tick();
-    });
+    this.clock.on(() => this.tick());
     this.playerStateService.onPlayerLoaded((player) => this.sendSnapshot(player));
     this.playerStateService.onPlayerRemoving((player) =>
       this.hydratedPlayers.delete(player.UserId),

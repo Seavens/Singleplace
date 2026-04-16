@@ -1,7 +1,6 @@
 {
 	"compilerOptions": {
 		// required
-		"ignoreDeprecations": "6.0",
 		"allowSyntheticDefaultImports": true,
 		"jsx": "react",
 		"jsxFactory": "Roact.createElement",
