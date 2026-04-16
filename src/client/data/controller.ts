@@ -1,8 +1,8 @@
 import { Controller, OnStart } from '@flamework/core';
 import Squash from '@rbxts/squash';
 import { Events, Functions } from 'client/network';
-import { DataReplica, DataManager } from 'shared';
-import { parseDataUserId, normalizeData } from 'shared/data/utils';
+import { DataReplica, DataManager, DataFlags } from 'shared';
+import { parseDataUserId } from 'shared/data/utils';
 
 const serdesCount = Squash.vlq();
 
@@ -25,13 +25,13 @@ export class DataController implements OnStart {
           continue;
         }
 
-        if (delta.cleanup) {
+        if ((delta.flags & DataFlags.Cleanup) !== 0) {
           DataManager.deleteData(userId);
           continue;
         }
 
         if (delta.data !== undefined) {
-          DataManager.setData(userId, normalizeData(delta.data));
+          DataManager.setData(userId, delta.data);
         }
       }
     });

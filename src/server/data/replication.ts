@@ -1,12 +1,12 @@
 import { Service, OnStart } from '@flamework/core';
+import Object from '@rbxts/object-utils';
 import { Players } from '@rbxts/services';
 import Squash from '@rbxts/squash';
 import { Functions, Events } from 'server/network';
-import { Clock } from 'shared/core';
+import { GameClock } from 'shared/core';
 import { DataReplica, DataReplicationDelta } from 'shared/data/replication';
 import { dataAtom, DataManager } from 'shared/data/state';
 import { buildDataKey, parseDataUserId } from 'shared/data/utils';
-import { iterateRecord } from 'shared/utils';
 import { PlayerStateService } from 'server/players';
 
 const serdesCount = Squash.vlq();
@@ -14,31 +14,38 @@ const serdesCount = Squash.vlq();
 @Service({})
 export class DataReplicationService implements OnStart {
   private readonly replicas = new Map<string, DataReplica>();
-  private readonly clock = new Clock(1 / 5);
+  private readonly hydratedPlayers = new Set<number>();
+  private accum = 0;
 
   public constructor(private readonly playerStateService: PlayerStateService) {}
 
   public onStart(): void {
-    this.clock.on(() => this.tick());
-    // onPlayerLoaded already fires catch-up callbacks for any players loaded
-    // before this service started, so no separate loop is needed here.
+    GameClock.on((dt) => {
+      this.accum += dt;
+      if (this.accum < 0.2) return;
+      this.accum -= 0.2;
+      this.tick();
+    });
     this.playerStateService.onPlayerLoaded((player) => this.sendSnapshot(player));
+    this.playerStateService.onPlayerRemoving((player) =>
+      this.hydratedPlayers.delete(player.UserId),
+    );
     Functions.requestHydration.setCallback((player) => this.sendSnapshot(player));
   }
 
   private tick(): void {
     const grouped = this.collectDeltas();
-    for (const [userId, deltas] of grouped) {
+    grouped.forEach((deltas, userId) => {
       if (deltas.size() === 0) {
-        continue;
+        return;
       }
       const player = Players.GetPlayerByUserId(userId);
       if (!player) {
-        continue;
+        return;
       }
       const payload = this.encode(deltas);
       Events.core.dataDelta(player, payload);
-    }
+    });
   }
 
   private collectDeltas(): Map<number, Array<DataReplicationDelta>> {
@@ -46,30 +53,36 @@ export class DataReplicationService implements OnStart {
     const current = dataAtom();
     const seen = new Set<string>();
 
-    iterateRecord(current, (key, data) => {
-      seen.add(key);
-      const userId = parseDataUserId(key);
+    for (const [key, data] of Object.entries(current)) {
+      const recordKey = key as string;
+      seen.add(recordKey);
+      const userId = parseDataUserId(recordKey);
       if (userId === undefined) {
-        return;
+        continue;
       }
       if (!this.playerStateService.isPlayerLoaded(userId)) {
-        return;
+        continue;
       }
-      let replica = this.replicas.get(key);
+      let replica = this.replicas.get(recordKey);
       if (!replica) {
-        replica = new DataReplica(key, data);
-        this.replicas.set(key, replica);
+        replica = new DataReplica(recordKey, data);
+        this.replicas.set(recordKey, replica);
       }
       const delta = replica.update(data);
       if (delta) {
         this.pushDelta(grouped, userId, delta);
       }
+    }
+
+    const stale: Array<string> = [];
+    this.replicas.forEach((_, key) => {
+      if (!seen.has(key)) {
+        stale.push(key);
+      }
     });
 
-    for (const [key, replica] of this.replicas) {
-      if (seen.has(key)) {
-        continue;
-      }
+    for (const key of stale) {
+      const replica = this.replicas.get(key)!;
       const userId = parseDataUserId(key);
       this.replicas.delete(key);
       if (userId === undefined) {
@@ -83,6 +96,10 @@ export class DataReplicationService implements OnStart {
   }
 
   private sendSnapshot(player: Player): void {
+    if (this.hydratedPlayers.has(player.UserId)) {
+      return;
+    }
+
     const key = buildDataKey(player.UserId);
     if (dataAtom()[key] === undefined) {
       warn(`[DataReplication] sendSnapshot called before data loaded for ${player.UserId}`);
@@ -96,6 +113,7 @@ export class DataReplicationService implements OnStart {
     }
     const snapshot = replica.snapshotDelta(entry);
     replica.prime();
+    this.hydratedPlayers.add(player.UserId);
     const payload = this.encode([snapshot]);
     Events.core.dataDelta(player, payload);
   }

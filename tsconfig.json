@@ -1,9 +1,8 @@
 {
 	"compilerOptions": {
 		// required
-		"ignoreDeprecations": "5.0",
+		"ignoreDeprecations": "6.0",
 		"allowSyntheticDefaultImports": true,
-		"downlevelIteration": true,
 		"jsx": "react",
 		"jsxFactory": "Roact.createElement",
 		"jsxFragmentFactory": "Roact.createFragment",

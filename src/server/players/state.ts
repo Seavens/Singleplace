@@ -73,14 +73,13 @@ export class PlayerStateService implements OnStart {
       return;
     }
 
-    this.loadedPlayers.add(player);
-
     DataManager.updateData(player.UserId, (data) => {
       const streakUpdate = applyLoginStreak(data.profile, DateTime.now());
       data.profile.loginStreak = streakUpdate.loginStreak;
       data.profile.lastLogin = streakUpdate.lastLogin;
     });
 
+    this.loadedPlayers.add(player);
     this.playerLoaded.Fire(player);
   }
 

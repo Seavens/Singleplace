@@ -2,21 +2,18 @@ import Squash, { Cursor } from '@rbxts/squash';
 import { Data } from '../types';
 import { DataFlags, DataReplicationDelta } from './types';
 import { HttpService } from '@rbxts/services';
-import { deepClone } from 'shared/utils';
 
 const serdesKey = Squash.string();
-const serdesFlags = Squash.uint(2);
+const serdesFlags = Squash.uint(1);
 const serdesPayload = Squash.opt(Squash.string());
 
 export class DataReplica {
   public readonly key: string;
-  private snapshot?: Data;
   private lastSerialized?: string;
   private initialized = false;
 
   public constructor(key: string, initial: Data) {
     this.key = key;
-    this.snapshot = deepClone(initial);
     this.lastSerialized = HttpService.JSONEncode(initial);
   }
 
@@ -25,7 +22,6 @@ export class DataReplica {
     if (this.initialized && serialized === this.lastSerialized) {
       return undefined;
     }
-    this.snapshot = deepClone(data);
     this.lastSerialized = serialized;
     const flags = this.initialized ? DataFlags.Data : DataFlags.Data | DataFlags.Spawn;
     this.initialized = true;
@@ -33,30 +29,24 @@ export class DataReplica {
       key: this.key,
       flags,
       data,
-      spawn: (flags & DataFlags.Spawn) !== 0,
     };
   }
 
   public snapshotDelta(data: Data): DataReplicationDelta {
-    const snapshot = data;
-    this.snapshot = deepClone(snapshot);
-    this.lastSerialized = HttpService.JSONEncode(snapshot);
+    this.lastSerialized = HttpService.JSONEncode(data);
     return {
       key: this.key,
       flags: DataFlags.Data | DataFlags.Spawn,
-      data: snapshot,
-      spawn: true,
+      data,
     };
   }
 
   public cleanup(): DataReplicationDelta {
-    this.snapshot = undefined;
     this.lastSerialized = undefined;
     this.initialized = false;
     return {
       key: this.key,
       flags: DataFlags.Cleanup,
-      cleanup: true,
     };
   }
 
@@ -78,8 +68,6 @@ export class DataReplica {
       key,
       flags,
       data: payload !== undefined ? (HttpService.JSONDecode(payload) as Data) : undefined,
-      spawn: (flags & DataFlags.Spawn) !== 0,
-      cleanup: (flags & DataFlags.Cleanup) !== 0,
     };
   }
 }

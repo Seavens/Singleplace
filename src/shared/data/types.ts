@@ -12,6 +12,4 @@ export const IS_DATA = t.interface({
 
 export type ProfileData = t.static<typeof IS_PROFILE_DATA>;
 
-export type Data = t.static<typeof IS_DATA> & {
-  profile: ProfileData;
-};
+export type Data = t.static<typeof IS_DATA>;
